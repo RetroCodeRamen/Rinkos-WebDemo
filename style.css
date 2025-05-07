@@ -17,6 +17,8 @@ body {
 
 #rinkos-screen {
   width: 400px;
+  min-width: 400px;
+  max-width: 400px;
   height: 300px;
   background: #f7f7f7;
   border: 3px solid #222;
@@ -107,4 +109,25 @@ body {
   min-width: 56px;
   font-size: 1em;
   margin-left: 2px;
+}
+
+.chatroom-list {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #f7f7f7;
+  border: 1px solid #bbb;
+  padding: 8px 4px 4px 8px;
+  display: block;
+  box-sizing: border-box;
+}
+
+.chat-message {
+  display: block;
+  margin-bottom: 4px;
+  word-break: break-word;
+  max-width: 100%;
 } 

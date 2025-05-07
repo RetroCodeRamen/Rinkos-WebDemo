@@ -183,7 +183,7 @@ function showChatRoom() {
     scrollIndex: 0
   };
   rinkosScreen.innerHTML = '';
-  drawChatRoom();
+  drawChatRoom('bottom');
   fetchChatRoomMessages();
   if (chatRoomPollInterval) clearInterval(chatRoomPollInterval);
   chatRoomPollInterval = setInterval(() => {
@@ -199,7 +199,7 @@ function leaveChatRoom() {
   showChatMenu();
 }
 
-function drawChatRoom() {
+function drawChatRoom(scrollTo = null, prevScrollData = null) {
   // Save input value and cursor position if input exists
   let prevInput = document.getElementById('chatroom-input');
   let prevValue = prevInput ? prevInput.value : chatRoomState.input;
@@ -208,12 +208,12 @@ function drawChatRoom() {
   let hadFocus = prevInput ? document.activeElement === prevInput : false;
 
   rinkosScreen.innerHTML = '';
-  let html = '<div class="chatroom-list" style="height:200px;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-end;background:#f7f7f7;border:1px solid #bbb;padding:8px 4px 4px 8px;">';
+  let html = '<div class="chatroom-list" id="chatroom-list">';
   if (chatRoomState.messages.length === 0) {
     html += '<div style="color:#888;text-align:center;">No messages yet.</div>';
   } else {
     for (const msg of chatRoomState.messages) {
-      html += `<div style="margin-bottom:4px;"><b>${msg.sender}</b> <span style="font-size:0.8em;color:#888;">${formatTime(msg.time)}</span><br>${escapeHtml(msg.text)}</div>`;
+      html += `<div class="chat-message"><b>${msg.sender}</b> <span style="font-size:0.8em;color:#888;">${formatTime(msg.time)}</span><br>${escapeHtml(msg.text)}</div>`;
     }
   }
   html += '</div>';
@@ -225,6 +225,18 @@ function drawChatRoom() {
   </form>`;
   html += '<button id="chatroom-back" style="margin-top:8px;font-size:1em;width:100%;">Back</button>';
   rinkosScreen.innerHTML = html;
+
+  const chatList = document.getElementById('chatroom-list');
+
+  setTimeout(() => {
+    if (scrollTo === 'top') {
+      chatList.scrollTop = 0;
+    } else if (scrollTo === 'bottom' || (prevScrollData && prevScrollData.wasAtBottom)) {
+      chatList.scrollTop = chatList.scrollHeight;
+    } else if (prevScrollData && !prevScrollData.wasAtBottom) {
+      chatList.scrollTop = prevScrollData.prevScrollTop + (chatList.scrollHeight - prevScrollData.prevScrollHeight);
+    }
+  }, 0);
 
   const input = document.getElementById('chatroom-input');
   input.value = prevValue;
@@ -242,6 +254,10 @@ function drawChatRoom() {
       sendChatRoomMessage(text);
       input.value = '';
       chatRoomState.input = '';
+      setTimeout(() => {
+        const chatList = document.getElementById('chatroom-list');
+        chatList.scrollTop = chatList.scrollHeight;
+      }, 0);
     }
   };
   input.oninput = function(e) {
@@ -249,23 +265,49 @@ function drawChatRoom() {
   };
   document.getElementById('chatroom-back').onclick = leaveChatRoom;
 
-  // Arrow button handlers
-  document.getElementById('btn-up').onclick = () => handleKey({key: 'ArrowUp'});
-  document.getElementById('btn-down').onclick = () => handleKey({key: 'ArrowDown'});
+  document.getElementById('btn-up').onclick = () => scrollChat('up');
+  document.getElementById('btn-down').onclick = () => scrollChat('down');
+}
+
+function scrollChat(direction) {
+  const chatList = document.getElementById('chatroom-list');
+  const scrollAmount = 60; // px per scroll
+  if (direction === 'up') {
+    if (chatList.scrollTop === 0 && !chatRoomState.atTop && chatRoomState.oldestTime) {
+      // At top, fetch more
+      fetchChatRoomMessages(chatRoomState.oldestTime, true);
+    } else {
+      chatList.scrollTop = Math.max(0, chatList.scrollTop - scrollAmount);
+    }
+  } else if (direction === 'down') {
+    chatList.scrollTop = Math.min(chatList.scrollHeight, chatList.scrollTop + scrollAmount);
+  }
 }
 
 function fetchChatRoomMessages(before = null, append = false) {
   chatRoomState.loading = true;
   let url = 'http://localhost:3001/api/messages?recipient=broadcast&limit=5';
   if (before) url += `&before=${encodeURIComponent(before)}`;
+
+  // Save scroll data before fetching
+  const chatList = document.getElementById('chatroom-list');
+  let prevScrollData = null;
+  if (chatList) {
+    const prevScrollTop = chatList.scrollTop;
+    const prevScrollHeight = chatList.scrollHeight;
+    const wasAtBottom = Math.abs(prevScrollTop + chatList.clientHeight - prevScrollHeight) < 2;
+    prevScrollData = { prevScrollTop, prevScrollHeight, wasAtBottom };
+  }
+
   fetch(url)
     .then(res => res.json())
     .then(msgs => {
+      let scrollTo = null;
       if (append) {
-        // Only append messages that are not already in the list
         const existingTimes = new Set(chatRoomState.messages.map(m => m.time));
         const newMsgs = msgs.filter(m => !existingTimes.has(m.time));
         chatRoomState.messages = newMsgs.concat(chatRoomState.messages);
+        scrollTo = 'top';
       } else {
         chatRoomState.messages = msgs;
       }
@@ -273,7 +315,7 @@ function fetchChatRoomMessages(before = null, append = false) {
       if (chatRoomState.messages.length > 0) {
         chatRoomState.oldestTime = chatRoomState.messages[0].time;
       }
-      drawChatRoom();
+      drawChatRoom(scrollTo, prevScrollData);
     });
 }
 
@@ -347,15 +389,17 @@ function handleKey(e) {
     }
   } else if (state === 'chatroom') {
     if (e.key === 'ArrowUp') {
-      if (!chatRoomState.atTop && chatRoomState.oldestTime) {
-        fetchChatRoomMessages(chatRoomState.oldestTime, true);
-      }
+      scrollChat('up');
+    }
+    if (e.key === 'ArrowDown') {
+      scrollChat('down');
     }
     if (e.key === 'Escape') {
       leaveChatRoom();
     }
     return;
   }
+  oldHandleKey(e);
 }
 
 // On load, check for user info and time
