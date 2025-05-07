@@ -59,9 +59,20 @@ app.post('/api/message', (req, res) => {
 });
 
 app.get('/api/messages', (req, res) => {
-  const { recipient = 'broadcast', limit = 5, before } = req.query;
+  const { recipient = 'broadcast', limit = 5, before, user1, user2 } = req.query;
   let messages = readJson(MESSAGES_FILE, []);
-  messages = messages.filter(m => m.recipient === recipient);
+
+  if (user1 && user2) {
+    // Bi-directional Bunnygram: fetch all messages between user1 and user2
+    messages = messages.filter(m =>
+      (m.sender === user1 && m.recipient === user2) ||
+      (m.sender === user2 && m.recipient === user1)
+    );
+  } else {
+    // Default: by recipient (e.g., broadcast)
+    messages = messages.filter(m => m.recipient === recipient);
+  }
+
   messages.sort((a, b) => new Date(b.time) - new Date(a.time));
   if (before) {
     messages = messages.filter(m => new Date(m.time) < new Date(before));

@@ -130,4 +130,45 @@ body {
   margin-bottom: 4px;
   word-break: break-word;
   max-width: 100%;
+}
+
+#bunnygram-form {
+  max-width: 360px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  align-items: center;
+}
+#bunnygram-input {
+  min-width: 0;
+  width: 140px;
+  flex: 1 1 120px;
+  font-size: 1em;
+}
+#btn-up-bunnygram, #btn-down-bunnygram {
+  width: 32px;
+  height: 32px;
+  font-size: 1.1em;
+  margin: 0 2px;
+  padding: 0;
+}
+#bunnygram-form button[type="submit"] {
+  min-width: 56px;
+  font-size: 1em;
+  margin-left: 2px;
+}
+#bunnygram-list {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #f7f7f7;
+  border: 1px solid #bbb;
+  padding: 8px 4px 4px 8px;
+  display: block;
+  box-sizing: border-box;
 } 

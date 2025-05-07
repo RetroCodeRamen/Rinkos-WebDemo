@@ -28,15 +28,22 @@ const menuOptions = [
 ];
 
 const chatMenuOptions = [
-  'Chat Rooms',
-  'Instant Messages',
+  'Bunny Den',
+  'Bunnygram',
   'Back'
 ];
 
-let state = 'boot'; // 'boot', 'menu', 'placeholder', 'setup', 'settings', 'chatmenu'
+const bunnygramMenuOptions = [
+  'Start New Bunnygram',
+  'Review Past Bunnygrams',
+  'Back'
+];
+
+let state = 'boot'; // 'boot', 'menu', 'placeholder', 'setup', 'settings', 'chatmenu', 'bunnygrammenu', 'bunnygramstart', 'bunnygramreview', 'bunnygramconversation'
 let selected = 0;
 let chatSelected = 0;
 let placeholderText = '';
+let bunnygramSelected = 0;
 
 const rinkosScreen = document.getElementById('rinkos-screen');
 const logoImg = document.getElementById('rinko-logo-img');
@@ -51,6 +58,16 @@ let chatRoomState = {
 };
 
 let chatRoomPollInterval = null;
+
+let bunnygramConvState = {
+  messages: [],
+  loading: false,
+  atTop: false,
+  input: '',
+  oldestTime: null,
+  pollInterval: null,
+  recipient: ''
+};
 
 function drawBootScreen() {
   if (logoImg) logoImg.style.display = 'none';
@@ -80,6 +97,16 @@ function drawChatMenu() {
   let menuHtml = '<div class="menu-list">';
   for (let i = 0; i < chatMenuOptions.length; i++) {
     menuHtml += `<div class=\"menu-item\">${chatSelected === i ? '<span class=\\"menu-cursor\\">&gt;</span>' : '<span style=\\"display:inline-block;width:1em;\\"></span>'} ${chatMenuOptions[i]}</div>`;
+  }
+  menuHtml += '</div>';
+  rinkosScreen.innerHTML = menuHtml;
+}
+
+function drawBunnygramMenu() {
+  rinkosScreen.innerHTML = '';
+  let menuHtml = '<div class="menu-list">';
+  for (let i = 0; i < bunnygramMenuOptions.length; i++) {
+    menuHtml += `<div class=\"menu-item\">${bunnygramSelected === i ? '<span class=\\"menu-cursor\\">&gt;</span>' : '<span style=\\"display:inline-block;width:1em;\\"></span>'} ${bunnygramMenuOptions[i]}</div>`;
   }
   menuHtml += '</div>';
   rinkosScreen.innerHTML = menuHtml;
@@ -152,6 +179,12 @@ function showChatMenu() {
   state = 'chatmenu';
   chatSelected = 0;
   drawChatMenu();
+}
+
+function showBunnygramMenu() {
+  state = 'bunnygrammenu';
+  bunnygramSelected = 0;
+  drawBunnygramMenu();
 }
 
 function showPlaceholder(text) {
@@ -381,10 +414,26 @@ function handleKey(e) {
     } else if (e.key === 'Enter') {
       if (chatMenuOptions[chatSelected] === 'Back') {
         showMenu();
-      } else if (chatMenuOptions[chatSelected] === 'Chat Rooms') {
+      } else if (chatMenuOptions[chatSelected] === 'Bunny Den') {
         showChatRoom();
-      } else if (chatMenuOptions[chatSelected] === 'Instant Messages') {
-        showPlaceholder('Instant Messages coming soon...');
+      } else if (chatMenuOptions[chatSelected] === 'Bunnygram') {
+        showBunnygramMenu();
+      }
+    }
+  } else if (state === 'bunnygrammenu') {
+    if (e.key === 'ArrowUp') {
+      bunnygramSelected = (bunnygramSelected - 1 + bunnygramMenuOptions.length) % bunnygramMenuOptions.length;
+      drawBunnygramMenu();
+    } else if (e.key === 'ArrowDown') {
+      bunnygramSelected = (bunnygramSelected + 1) % bunnygramMenuOptions.length;
+      drawBunnygramMenu();
+    } else if (e.key === 'Enter') {
+      if (bunnygramMenuOptions[bunnygramSelected] === 'Back') {
+        showChatMenu();
+      } else if (bunnygramMenuOptions[bunnygramSelected] === 'Start New Bunnygram') {
+        showBunnygramStart();
+      } else if (bunnygramMenuOptions[bunnygramSelected] === 'Review Past Bunnygrams') {
+        showBunnygramReview();
       }
     }
   } else if (state === 'chatroom') {
@@ -417,4 +466,194 @@ function startRinkOS() {
 }
 
 startRinkOS();
-window.addEventListener('keydown', handleKey); 
+window.addEventListener('keydown', handleKey);
+
+// Scaffold Bunnygram start and review flows
+function showBunnygramStart() {
+  state = 'bunnygramstart';
+  rinkosScreen.innerHTML = `<form id="bunnygram-start-form" style="display:flex;flex-direction:column;align-items:center;gap:1em;width:90%;margin:0 auto;">
+    <label style="font-size:1.1em;">Send a Bunnygram to:<br>
+      <input id="bunnygram-recipient" type="text" maxlength="16" style="font-size:1em;width:180px;" required autofocus />
+    </label>
+    <button type="submit" style="font-size:1.1em;">Start</button>
+    <button type="button" id="bunnygram-back" style="font-size:1em;">Back</button>
+  </form>`;
+  document.getElementById('bunnygram-start-form').onsubmit = function(e) {
+    e.preventDefault();
+    const recipient = document.getElementById('bunnygram-recipient').value.trim();
+    if (recipient) {
+      showBunnygramConversation(recipient);
+    }
+  };
+  document.getElementById('bunnygram-back').onclick = showBunnygramMenu;
+}
+
+function showBunnygramReview() {
+  state = 'bunnygramreview';
+  rinkosScreen.innerHTML = '<div style="text-align:center;margin-top:2em;font-size:1.2em;">Review Past Bunnygrams coming soon...</div>';
+}
+
+function showBunnygramConversation(recipient) {
+  state = 'bunnygramconversation';
+  bunnygramConvState = {
+    messages: [],
+    loading: false,
+    atTop: false,
+    input: '',
+    oldestTime: null,
+    pollInterval: null,
+    recipient
+  };
+  rinkosScreen.innerHTML = '';
+  drawBunnygramConversation('bottom');
+  fetchBunnygramMessages();
+  if (bunnygramConvState.pollInterval) clearInterval(bunnygramConvState.pollInterval);
+  bunnygramConvState.pollInterval = setInterval(() => {
+    if (state === 'bunnygramconversation') fetchBunnygramMessages();
+  }, 2000);
+}
+
+function leaveBunnygramConversation() {
+  if (bunnygramConvState.pollInterval) {
+    clearInterval(bunnygramConvState.pollInterval);
+    bunnygramConvState.pollInterval = null;
+  }
+  showBunnygramMenu();
+}
+
+function drawBunnygramConversation(scrollTo = null, prevScrollData = null) {
+  // Save input value and cursor position if input exists
+  let prevInput = document.getElementById('bunnygram-input');
+  let prevValue = prevInput ? prevInput.value : bunnygramConvState.input;
+  let prevSelectionStart = prevInput ? prevInput.selectionStart : null;
+  let prevSelectionEnd = prevInput ? prevInput.selectionEnd : null;
+  let hadFocus = prevInput ? document.activeElement === prevInput : false;
+
+  rinkosScreen.innerHTML = '';
+  let html = `<div style="font-size:1.1em;text-align:center;margin-bottom:0.5em;">Bunnygram with <b>${bunnygramConvState.recipient}</b></div>`;
+  html += '<div class="chatroom-list" id="bunnygram-list">';
+  if (bunnygramConvState.messages.length === 0) {
+    html += '<div style="color:#888;text-align:center;">No messages yet.</div>';
+  } else {
+    for (const msg of bunnygramConvState.messages) {
+      html += `<div class="chat-message"><b>${msg.sender}</b> <span style="font-size:0.8em;color:#888;">${formatTime(msg.time)}</span><br>${escapeHtml(msg.text)}</div>`;
+    }
+  }
+  html += '</div>';
+  html += `<form id="bunnygram-form">
+    <input id="bunnygram-input" type="text" maxlength="200" autocomplete="off" placeholder="Type a message..." autofocus value="${prevValue.replace(/"/g, '&quot;')}" />
+    <button id="btn-up-bunnygram" type="button">&#8593;</button>
+    <button id="btn-down-bunnygram" type="button">&#8595;</button>
+    <button type="submit">Send</button>
+  </form>`;
+  html += '<button id="bunnygram-back" style="margin-top:8px;font-size:1em;width:100%;">Back</button>';
+  rinkosScreen.innerHTML = html;
+
+  const list = document.getElementById('bunnygram-list');
+  setTimeout(() => {
+    if (scrollTo === 'top') {
+      list.scrollTop = 0;
+    } else if (scrollTo === 'bottom' || (prevScrollData && prevScrollData.wasAtBottom)) {
+      list.scrollTop = list.scrollHeight;
+    } else if (prevScrollData && !prevScrollData.wasAtBottom) {
+      list.scrollTop = prevScrollData.prevScrollTop + (list.scrollHeight - prevScrollData.prevScrollHeight);
+    }
+  }, 0);
+
+  const input = document.getElementById('bunnygram-input');
+  input.value = prevValue;
+  if (hadFocus && input) {
+    input.focus();
+    if (prevSelectionStart !== null && prevSelectionEnd !== null) {
+      input.setSelectionRange(prevSelectionStart, prevSelectionEnd);
+    }
+  }
+  input.oninput = function(e) {
+    bunnygramConvState.input = e.target.value;
+  };
+  document.getElementById('bunnygram-form').onsubmit = function(e) {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (text) {
+      sendBunnygramMessage(text);
+      input.value = '';
+      bunnygramConvState.input = '';
+      setTimeout(() => {
+        const list = document.getElementById('bunnygram-list');
+        list.scrollTop = list.scrollHeight;
+      }, 0);
+    }
+  };
+  document.getElementById('bunnygram-back').onclick = leaveBunnygramConversation;
+  document.getElementById('btn-up-bunnygram').onclick = () => scrollBunnygram('up');
+  document.getElementById('btn-down-bunnygram').onclick = () => scrollBunnygram('down');
+}
+
+function fetchBunnygramMessages(before = null, append = false) {
+  bunnygramConvState.loading = true;
+  const user = getUserInfo();
+  let url = `http://localhost:3001/api/messages?limit=5`;
+  url += `&user1=${encodeURIComponent(user.username)}`;
+  url += `&user2=${encodeURIComponent(bunnygramConvState.recipient)}`;
+  if (before) url += `&before=${encodeURIComponent(before)}`;
+
+  // Save scroll data before fetching
+  const list = document.getElementById('bunnygram-list');
+  let prevScrollData = null;
+  if (list) {
+    const prevScrollTop = list.scrollTop;
+    const prevScrollHeight = list.scrollHeight;
+    const wasAtBottom = Math.abs(prevScrollTop + list.clientHeight - prevScrollHeight) < 2;
+    prevScrollData = { prevScrollTop, prevScrollHeight, wasAtBottom };
+  }
+
+  fetch(url)
+    .then(res => res.json())
+    .then(msgs => {
+      let scrollTo = null;
+      if (append) {
+        const existingTimes = new Set(bunnygramConvState.messages.map(m => m.time));
+        const newMsgs = msgs.filter(m => !existingTimes.has(m.time));
+        bunnygramConvState.messages = newMsgs.concat(bunnygramConvState.messages);
+        scrollTo = 'top';
+      } else {
+        bunnygramConvState.messages = msgs;
+      }
+      bunnygramConvState.atTop = msgs.length < 5;
+      if (bunnygramConvState.messages.length > 0) {
+        bunnygramConvState.oldestTime = bunnygramConvState.messages[0].time;
+      }
+      drawBunnygramConversation(scrollTo, prevScrollData);
+    });
+}
+
+function sendBunnygramMessage(text) {
+  const user = getUserInfo();
+  const now = new Date();
+  fetch('http://localhost:3001/api/message', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sender: user.username,
+      recipient: bunnygramConvState.recipient,
+      time: now.toISOString(),
+      text
+    })
+  }).then(() => {
+    fetchBunnygramMessages();
+  });
+}
+
+function scrollBunnygram(direction) {
+  const list = document.getElementById('bunnygram-list');
+  const scrollAmount = 60;
+  if (direction === 'up') {
+    if (list.scrollTop === 0 && !bunnygramConvState.atTop && bunnygramConvState.oldestTime) {
+      fetchBunnygramMessages(bunnygramConvState.oldestTime, true);
+    } else {
+      list.scrollTop = Math.max(0, list.scrollTop - scrollAmount);
+    }
+  } else if (direction === 'down') {
+    list.scrollTop = Math.min(list.scrollHeight, list.scrollTop + scrollAmount);
+  }
+} 
