@@ -69,6 +69,41 @@ let bunnygramConvState = {
   recipient: ''
 };
 
+let powerOnStarted = false;
+
+function getPowerOnStarted() {
+  return powerOnStarted;
+}
+
+function setPowerOnStarted(value) {
+  powerOnStarted = value;
+}
+
+function showPowerOffOverlay() {
+  const overlay = document.getElementById('poweroff-overlay');
+  overlay.classList.remove('fade');
+  overlay.style.display = 'flex';
+  setPowerOnStarted(false);
+  function handlePowerOn() {
+    if (getPowerOnStarted()) return;
+    setPowerOnStarted(true);
+    overlay.classList.add('fade');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      startRinkOS();
+    }, 700);
+    window.removeEventListener('mousedown', handlePowerOn);
+    window.removeEventListener('touchstart', handlePowerOn);
+    window.removeEventListener('keydown', handlePowerOn);
+  }
+  window.addEventListener('mousedown', handlePowerOn);
+  window.addEventListener('touchstart', handlePowerOn);
+  window.addEventListener('keydown', handlePowerOn);
+}
+
+// On page load, show Power Off overlay and wait for user interaction
+window.addEventListener('DOMContentLoaded', showPowerOffOverlay);
+
 function drawBootScreen() {
   if (logoImg) logoImg.style.display = 'none';
   rinkosScreen.innerHTML = `
@@ -451,7 +486,40 @@ function handleKey(e) {
   oldHandleKey(e);
 }
 
-// On load, check for user info and time
+function playStartupChord() {
+  const audio = document.getElementById('startup-chime');
+  if (audio) {
+    audio.currentTime = 0;
+    audio.play();
+  }
+}
+
+function showStartupAnimation() {
+  state = 'startup';
+  rinkosScreen.classList.add('startup');
+  rinkosScreen.innerHTML = '';
+  // 1. Wait for Power Off fade, then show logo off-screen and start animation
+  setTimeout(() => {
+    rinkosScreen.innerHTML = `<img id="rinko-logo-anim" src="RinkoLogo.png" alt="Rinko Logo" />`;
+    // 2. After 1s (slide-in), play chime (only once)
+    setTimeout(() => {
+      playStartupChord();
+      // 3. Hold logo for 4s, then fade out
+      setTimeout(() => {
+        const logo = document.getElementById('rinko-logo-anim');
+        if (logo) logo.classList.add('logo-fade-out');
+        // 4. After fade, show menu
+        setTimeout(() => {
+          rinkosScreen.classList.remove('startup');
+          rinkosScreen.innerHTML = '';
+          showMenu();
+        }, 700);
+      }, 4000);
+    }, 1000); // 1s for earlier chime
+  }, 700); // Wait for Power Off fade
+}
+
+// Replace boot logic with startup animation
 function startRinkOS() {
   if (!getUserInfo() || !getDeviceTime()) {
     state = 'setup';
@@ -460,15 +528,10 @@ function startRinkOS() {
     rinkosScreen.appendChild(logoImg);
     drawSetupScreen();
   } else {
-    drawBootScreen();
-    setTimeout(showMenu, BOOT_TIME);
+    showStartupAnimation();
   }
 }
 
-startRinkOS();
-window.addEventListener('keydown', handleKey);
-
-// Scaffold Bunnygram start and review flows
 function showBunnygramStart() {
   state = 'bunnygramstart';
   rinkosScreen.innerHTML = `<form id="bunnygram-start-form" style="display:flex;flex-direction:column;align-items:center;gap:1em;width:90%;margin:0 auto;">
@@ -656,4 +719,6 @@ function scrollBunnygram(direction) {
   } else if (direction === 'down') {
     list.scrollTop = Math.min(list.scrollHeight, list.scrollTop + scrollAmount);
   }
-} 
+}
+
+window.addEventListener('keydown', handleKey); 
