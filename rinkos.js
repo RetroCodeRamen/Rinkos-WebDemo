@@ -45,7 +45,7 @@ const menuOptions = [
 ];
 
 const chatMenuOptions = [
-  'Bunny Den',
+  'The Den',
   'New Chat',
   'Messages',
   'Active Users',
@@ -473,7 +473,7 @@ function handleKey(e) {
       chatSelected = (chatSelected + 1) % chatMenuOptions.length;
       drawChatMenu();
     } else if (e.key === 'Enter') {
-      if (chatMenuOptions[chatSelected] === 'Bunny Den') {
+      if (chatMenuOptions[chatSelected] === 'The Den') {
         showChatRoom();
       } else if (chatMenuOptions[chatSelected] === 'New Chat') {
         showNewChatScreen();
