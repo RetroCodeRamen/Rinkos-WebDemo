@@ -14,7 +14,7 @@ RinkOS is in early beta and missing many features. The goal for **version 1.0** 
 
 ### Planned Features for 1.0
 - **You & Me:** User profiles and social connections
-- **Chat:** Real-time device-to-device messaging (broadcast and direct)
+- **Chat:** ✅ Real-time device-to-device messaging (broadcast and direct)
 - **E-Mail:** Basic email client
 - **CyCommunity:** Discovery of nearby users
 - **Address/Phone Book**

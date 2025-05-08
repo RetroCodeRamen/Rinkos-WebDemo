@@ -22,28 +22,24 @@ function saveDeviceTime(time) {
 
 const menuOptions = [
   'Chat',
-  'Peer List',
   'System Info',
   'Settings'
 ];
 
 const chatMenuOptions = [
   'Bunny Den',
-  'Bunnygram',
+  'New Chat',
+  'Messages',
+  'Active Users',
   'Back'
 ];
 
-const bunnygramMenuOptions = [
-  'Start New Bunnygram',
-  'Review Past Bunnygrams',
-  'Back'
-];
-
-let state = 'boot'; // 'boot', 'menu', 'placeholder', 'setup', 'settings', 'chatmenu', 'bunnygrammenu', 'bunnygramstart', 'bunnygramreview', 'bunnygramconversation'
+let state = 'boot'; // 'boot', 'menu', 'placeholder', 'setup', 'settings', 'chatmenu', 'chatroom', 'directmessages', 'peerlist', 'newchat'
 let selected = 0;
 let chatSelected = 0;
 let placeholderText = '';
-let bunnygramSelected = 0;
+let messagesSelected = 0;
+let peerListSelected = 0;
 
 const rinkosScreen = document.getElementById('rinkos-screen');
 const logoImg = document.getElementById('rinko-logo-img');
@@ -70,6 +66,22 @@ let bunnygramConvState = {
 };
 
 let powerOnStarted = false;
+
+let messagesState = {
+  conversations: [],
+  selectedConversation: null,
+  messages: [],
+  loading: false,
+  atTop: false,
+  input: '',
+  oldestTime: null,
+  scrollIndex: 0
+};
+
+let peerListState = {
+  peers: [],
+  lastUpdate: 0
+};
 
 function getPowerOnStarted() {
   return powerOnStarted;
@@ -132,16 +144,6 @@ function drawChatMenu() {
   let menuHtml = '<div class="menu-list">';
   for (let i = 0; i < chatMenuOptions.length; i++) {
     menuHtml += `<div class=\"menu-item\">${chatSelected === i ? '<span class=\\"menu-cursor\\">&gt;</span>' : '<span style=\\"display:inline-block;width:1em;\\"></span>'} ${chatMenuOptions[i]}</div>`;
-  }
-  menuHtml += '</div>';
-  rinkosScreen.innerHTML = menuHtml;
-}
-
-function drawBunnygramMenu() {
-  rinkosScreen.innerHTML = '';
-  let menuHtml = '<div class="menu-list">';
-  for (let i = 0; i < bunnygramMenuOptions.length; i++) {
-    menuHtml += `<div class=\"menu-item\">${bunnygramSelected === i ? '<span class=\\"menu-cursor\\">&gt;</span>' : '<span style=\\"display:inline-block;width:1em;\\"></span>'} ${bunnygramMenuOptions[i]}</div>`;
   }
   menuHtml += '</div>';
   rinkosScreen.innerHTML = menuHtml;
@@ -214,12 +216,6 @@ function showChatMenu() {
   state = 'chatmenu';
   chatSelected = 0;
   drawChatMenu();
-}
-
-function showBunnygramMenu() {
-  state = 'bunnygrammenu';
-  bunnygramSelected = 0;
-  drawBunnygramMenu();
 }
 
 function showPlaceholder(text) {
@@ -431,12 +427,10 @@ function handleKey(e) {
       selected = (selected + 1) % menuOptions.length;
       drawMenu();
     } else if (e.key === 'Enter') {
-      if (menuOptions[selected] === 'Settings') {
-        showSettings();
-      } else if (menuOptions[selected] === 'Chat') {
+      if (menuOptions[selected] === 'Chat') {
         showChatMenu();
-      } else {
-        showPlaceholder('Loading ' + menuOptions[selected] + '...');
+      } else if (menuOptions[selected] === 'Settings') {
+        showSettings();
       }
     }
   } else if (state === 'chatmenu') {
@@ -447,29 +441,66 @@ function handleKey(e) {
       chatSelected = (chatSelected + 1) % chatMenuOptions.length;
       drawChatMenu();
     } else if (e.key === 'Enter') {
-      if (chatMenuOptions[chatSelected] === 'Back') {
-        showMenu();
-      } else if (chatMenuOptions[chatSelected] === 'Bunny Den') {
+      if (chatMenuOptions[chatSelected] === 'Bunny Den') {
         showChatRoom();
-      } else if (chatMenuOptions[chatSelected] === 'Bunnygram') {
-        showBunnygramMenu();
+      } else if (chatMenuOptions[chatSelected] === 'New Chat') {
+        showNewChatScreen();
+      } else if (chatMenuOptions[chatSelected] === 'Messages') {
+        state = 'messages';
+        messagesSelected = 0;
+        fetchConversations();
+        drawMessagesScreen();
+      } else if (chatMenuOptions[chatSelected] === 'Active Users') {
+        state = 'peerlist';
+        fetchPeerList();
+        drawPeerList();
+      } else if (chatMenuOptions[chatSelected] === 'Back') {
+        showMenu();
       }
+    } else if (e.key === 'Escape') {
+      showMenu();
     }
-  } else if (state === 'bunnygrammenu') {
+  } else if (state === 'messages') {
     if (e.key === 'ArrowUp') {
-      bunnygramSelected = (bunnygramSelected - 1 + bunnygramMenuOptions.length) % bunnygramMenuOptions.length;
-      drawBunnygramMenu();
+      messagesSelected = Math.max(0, messagesSelected - 1);
+      drawMessagesScreen();
     } else if (e.key === 'ArrowDown') {
-      bunnygramSelected = (bunnygramSelected + 1) % bunnygramMenuOptions.length;
-      drawBunnygramMenu();
+      messagesSelected = Math.min(messagesState.conversations.length, messagesSelected + 1);
+      drawMessagesScreen();
     } else if (e.key === 'Enter') {
-      if (bunnygramMenuOptions[bunnygramSelected] === 'Back') {
+      if (messagesSelected < messagesState.conversations.length) {
+        showBunnygramConversation(messagesState.conversations[messagesSelected].username);
+      } else if (messagesSelected === messagesState.conversations.length) {
+        // Back button is selected
         showChatMenu();
-      } else if (bunnygramMenuOptions[bunnygramSelected] === 'Start New Bunnygram') {
-        showBunnygramStart();
-      } else if (bunnygramMenuOptions[bunnygramSelected] === 'Review Past Bunnygrams') {
-        showBunnygramReview();
       }
+    } else if (e.key === 'Escape') {
+      showChatMenu();
+    }
+  } else if (state === 'peerlist') {
+    if (e.key === 'ArrowUp') {
+      peerListSelected = Math.max(0, peerListSelected - 1);
+      drawPeerList();
+    } else if (e.key === 'ArrowDown') {
+      peerListSelected = Math.min(peerListState.peers.length, peerListSelected + 1);
+      drawPeerList();
+    } else if (e.key === 'Enter') {
+      if (peerListSelected < peerListState.peers.length) {
+        showBunnygramConversation(peerListState.peers[peerListSelected].username);
+      } else if (peerListSelected === peerListState.peers.length) {
+        // Back button is selected
+        showChatMenu();
+      }
+    } else if (e.key === 'Escape') {
+      showChatMenu();
+    }
+  } else if (state === 'newchat') {
+    if (e.key === 'Escape') {
+      showChatMenu();
+    }
+  } else if (state === 'settings') {
+    if (e.key === 'Enter') {
+      showMenu();
     }
   } else if (state === 'chatroom') {
     if (e.key === 'ArrowUp') {
@@ -480,6 +511,18 @@ function handleKey(e) {
     }
     if (e.key === 'Escape') {
       leaveChatRoom();
+    }
+    return;
+  } else if (state === 'bunnygramconversation') {
+    if (e.key === 'ArrowUp') {
+      scrollBunnygram('up');
+    }
+    if (e.key === 'ArrowDown') {
+      scrollBunnygram('down');
+    }
+    if (e.key === 'Escape') {
+      leaveBunnygramConversation();
+      showChatMenu();
     }
     return;
   }
@@ -581,7 +624,7 @@ function leaveBunnygramConversation() {
     clearInterval(bunnygramConvState.pollInterval);
     bunnygramConvState.pollInterval = null;
   }
-  showBunnygramMenu();
+  showChatMenu();
 }
 
 function drawBunnygramConversation(scrollTo = null, prevScrollData = null) {
@@ -647,7 +690,9 @@ function drawBunnygramConversation(scrollTo = null, prevScrollData = null) {
       }, 0);
     }
   };
-  document.getElementById('bunnygram-back').onclick = leaveBunnygramConversation;
+  document.getElementById('bunnygram-back').onclick = () => {
+    leaveBunnygramConversation();
+  };
   document.getElementById('btn-up-bunnygram').onclick = () => scrollBunnygram('up');
   document.getElementById('btn-down-bunnygram').onclick = () => scrollBunnygram('down');
 }
@@ -720,5 +765,168 @@ function scrollBunnygram(direction) {
     list.scrollTop = Math.min(list.scrollHeight, list.scrollTop + scrollAmount);
   }
 }
+
+function showNewChatScreen() {
+  state = 'newchat';
+  rinkosScreen.innerHTML = `<form id="newchat-form" style="display:flex;flex-direction:column;align-items:center;gap:1em;width:90%;margin:0 auto;">
+    <label style="font-size:1.1em;">Start a chat with:<br>
+      <input id="newchat-username" type="text" maxlength="16" style="font-size:1em;width:180px;" required autofocus />
+    </label>
+    <button type="submit" style="font-size:1.1em;">Start Chat</button>
+    <button type="button" id="newchat-back" style="font-size:1em;">Back</button>
+  </form>`;
+  
+  document.getElementById('newchat-form').onsubmit = function(e) {
+    e.preventDefault();
+    const username = document.getElementById('newchat-username').value.trim();
+    if (username) {
+      showBunnygramConversation(username);
+    }
+  };
+  
+  document.getElementById('newchat-back').onclick = showChatMenu;
+}
+
+function drawMessagesScreen() {
+  if (logoImg) logoImg.style.display = 'none';
+  rinkosScreen.innerHTML = '';
+  
+  let html = '<div class="menu-list">';
+  html += '<div class="menu-header">Messages</div>';
+  
+  if (messagesState.conversations.length === 0) {
+    html += '<div class="menu-item">No conversations yet</div>';
+  } else {
+    for (let i = 0; i < messagesState.conversations.length; i++) {
+      const conv = messagesState.conversations[i];
+      html += `<div class="menu-item">${messagesSelected === i ? '<span class="menu-cursor">&gt;</span>' : '<span style="display:inline-block;width:1em;"></span>'} ${conv.username}</div>`;
+    }
+  }
+  
+  html += '<div class="menu-item"><span style="display:inline-block;width:1em;"></span> Back</div>';
+  html += '</div>';
+  rinkosScreen.innerHTML = html;
+}
+
+function drawPeerList() {
+  if (logoImg) logoImg.style.display = 'none';
+  rinkosScreen.innerHTML = '';
+  
+  let html = '<div class="menu-list">';
+  html += '<div class="menu-header">Active Users (Last 5 min)</div>';
+  
+  if (peerListState.peers.length === 0) {
+    html += '<div class="menu-item">No active users</div>';
+  } else {
+    for (let i = 0; i < peerListState.peers.length; i++) {
+      const peer = peerListState.peers[i];
+      html += `<div class="menu-item">${peerListSelected === i ? '<span class="menu-cursor">&gt;</span>' : '<span style="display:inline-block;width:1em;"></span>'} ${peer.username}</div>`;
+    }
+  }
+  
+  html += '<div class="menu-item"><span style="display:inline-block;width:1em;"></span> Back</div>';
+  html += '</div>';
+  rinkosScreen.innerHTML = html;
+}
+
+async function fetchConversations() {
+  const user = getUserInfo();
+  if (!user) return;
+  
+  try {
+    const response = await fetch(`http://localhost:3001/api/messages?user1=${user.username}`);
+    const messages = await response.json();
+    
+    // Get unique usernames from messages
+    const usernames = new Set();
+    messages.forEach(msg => {
+      if (msg.sender !== user.username) usernames.add(msg.sender);
+      if (msg.recipient !== user.username) usernames.add(msg.recipient);
+    });
+    
+    messagesState.conversations = Array.from(usernames).map(username => ({ username }));
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+  }
+}
+
+async function fetchMessages() {
+  const user = getUserInfo();
+  if (!user || !messagesState.selectedConversation) return;
+  
+  try {
+    const response = await fetch(`http://localhost:3001/api/messages?user1=${user.username}&user2=${messagesState.selectedConversation.username}`);
+    messagesState.messages = await response.json();
+    drawMessagesScreen();
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+  }
+}
+
+async function sendMessage(text) {
+  const user = getUserInfo();
+  if (!user || !messagesState.selectedConversation) return;
+  
+  try {
+    await fetch('http://localhost:3001/api/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: user.username,
+        recipient: messagesState.selectedConversation.username,
+        time: new Date().toISOString(),
+        text
+      })
+    });
+    
+    await fetchMessages();
+  } catch (error) {
+    console.error('Error sending message:', error);
+  }
+}
+
+async function fetchPeerList() {
+  try {
+    const response = await fetch('http://localhost:3001/api/peers');
+    peerListState.peers = await response.json();
+    peerListState.lastUpdate = Date.now();
+    drawPeerList();
+  } catch (error) {
+    console.error('Error fetching peer list:', error);
+  }
+}
+
+// Add keepalive functionality
+function startKeepalive() {
+  const user = getUserInfo();
+  if (!user) return;
+  
+  const sessionId = Math.random().toString(36).substring(7);
+  
+  async function sendKeepalive() {
+    try {
+      await fetch('http://localhost:3001/api/peer/keepalive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          username: user.username
+        })
+      });
+    } catch (error) {
+      console.error('Error sending keepalive:', error);
+    }
+  }
+  
+  // Send keepalive every minute
+  sendKeepalive();
+  setInterval(sendKeepalive, 60000);
+}
+
+// Start keepalive when RinkOS starts
+window.addEventListener('DOMContentLoaded', () => {
+  showPowerOffOverlay();
+  startKeepalive();
+});
 
 window.addEventListener('keydown', handleKey); 
