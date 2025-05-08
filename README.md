@@ -44,6 +44,10 @@ Once all these features are implemented, RinkOS will be considered version 1.0.
 - **Live peer list** (shows active users)
 - **Settings** (change username, set device time)
 - **Backend** (Node.js/Express, file-based JSON storage)
+- **RinkoScript Development Environment** (in progress)
+  - **Basic Script Editor Interface**
+  - **Save/Load Functionality**
+  - **Note:** Lua execution is currently not functional
 
 ## How to Run
 1. Clone this repo and install dependencies:
@@ -68,4 +72,34 @@ Once all these features are implemented, RinkOS will be considered version 1.0.
 
 ---
 
-**RinkOS** is a fun, open-source project to bring back the magic of social, hackable handhelds for a new generation! 
+**RinkOS** is a fun, open-source project to bring back the magic of social, hackable handhelds for a new generation!
+
+## Development
+
+### Current Status
+
+- Core functionality is stable and working
+- Chat system is fully functional
+- Settings and time management are operational
+- RinkoScript development environment is in progress
+  - Basic UI is implemented
+  - Script saving/loading works
+  - Lua execution is pending implementation
+
+### Roadmap
+
+- [ ] Complete RinkoScript implementation
+  - [ ] Working Lua execution
+  - [ ] File system integration
+  - [ ] Script management
+- [ ] Add more system utilities
+- [ ] Implement user profiles
+- [ ] Add system themes
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

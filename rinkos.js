@@ -18,11 +18,29 @@ function saveUserInfo(username) {
 
 function saveDeviceTime(time) {
   localStorage.setItem(TIME_KEY, time);
+  // Calculate offset between real time and device time
+  const [hours, minutes] = time.split(':').map(Number);
+  const now = new Date();
+  const deviceTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+  timeOffset = deviceTime.getTime() - now.getTime();
+}
+
+function getCurrentDeviceTime() {
+  const now = new Date();
+  const deviceTime = new Date(now.getTime() + timeOffset);
+  return deviceTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function updateClock() {
+  const clockElement = document.getElementById('device-clock');
+  if (clockElement) {
+    clockElement.textContent = getCurrentDeviceTime();
+  }
 }
 
 const menuOptions = [
   'Chat',
-  'System Info',
+  'RinkoScript',
   'Settings'
 ];
 
@@ -83,6 +101,11 @@ let peerListState = {
   lastUpdate: 0
 };
 
+let timeOffset = 0; // Offset between real time and device time
+
+let luaEnv = null;
+let installedScripts = new Set();
+
 function getPowerOnStarted() {
   return powerOnStarted;
 }
@@ -128,25 +151,26 @@ function drawBootScreen() {
 
 function drawMenu() {
   if (logoImg) logoImg.style.display = 'block';
-  let menuHtml = '<div class="menu-list">';
+  let menuHtml = `<div id="device-clock" style="text-align:center;margin-bottom:1em;font-size:1.2em;">${getCurrentDeviceTime()}</div>`;
+  menuHtml += '<div class="menu-list">';
   for (let i = 0; i < menuOptions.length; i++) {
     menuHtml += `<div class=\"menu-item\">${selected === i ? '<span class=\\"menu-cursor\\">&gt;</span>' : '<span style=\\"display:inline-block;width:1em;\\"></span>'} ${menuOptions[i]}</div>`;
   }
   menuHtml += '</div>';
   rinkosScreen.querySelector('.menu-list')?.remove();
-  rinkosScreen.querySelector('.placeholder-screen')?.remove();
+  rinkosScreen.querySelector('#device-clock')?.remove();
   rinkosScreen.insertAdjacentHTML('beforeend', menuHtml);
 }
 
 function drawChatMenu() {
   if (logoImg) logoImg.style.display = 'none';
-  rinkosScreen.innerHTML = '';
+  rinkosScreen.innerHTML = `<div id="device-clock" style="text-align:center;margin-bottom:1em;font-size:1.2em;">${getCurrentDeviceTime()}</div>`;
   let menuHtml = '<div class="menu-list">';
   for (let i = 0; i < chatMenuOptions.length; i++) {
     menuHtml += `<div class=\"menu-item\">${chatSelected === i ? '<span class=\\"menu-cursor\\">&gt;</span>' : '<span style=\\"display:inline-block;width:1em;\\"></span>'} ${chatMenuOptions[i]}</div>`;
   }
   menuHtml += '</div>';
-  rinkosScreen.innerHTML = menuHtml;
+  rinkosScreen.innerHTML += menuHtml;
 }
 
 function drawPlaceholder() {
@@ -183,10 +207,14 @@ function drawSetupScreen() {
 function drawSettingsScreen() {
   if (logoImg) logoImg.style.display = 'block';
   const user = getUserInfo();
+  const currentTime = getCurrentDeviceTime();
   rinkosScreen.innerHTML = `
     <form id="settings-form" style="display:flex;flex-direction:column;align-items:center;gap:1em;width:90%;margin:0 auto;">
       <label style="font-size:1.1em;">Change username:<br>
         <input id="settings-username" type="text" maxlength="16" value="${user ? user.username : ''}" style="font-size:1em;width:180px;" required autofocus />
+      </label>
+      <label style="font-size:1.1em;">Change device time (HH:MM):<br>
+        <input id="settings-time" type="time" value="${currentTime}" style="font-size:1em;width:120px;" required />
       </label>
       <button type="submit" style="font-size:1.1em;">Save</button>
       <button type="button" id="settings-back" style="font-size:1em;">Back</button>
@@ -195,8 +223,10 @@ function drawSettingsScreen() {
   document.getElementById('settings-form').onsubmit = function(e) {
     e.preventDefault();
     const username = document.getElementById('settings-username').value.trim();
-    if (username) {
+    const time = document.getElementById('settings-time').value;
+    if (username && time) {
       saveUserInfo(username);
+      saveDeviceTime(time);
       showMenu();
     }
   };
@@ -429,6 +459,8 @@ function handleKey(e) {
     } else if (e.key === 'Enter') {
       if (menuOptions[selected] === 'Chat') {
         showChatMenu();
+      } else if (menuOptions[selected] === 'RinkoScript') {
+        showRinkoScript();
       } else if (menuOptions[selected] === 'Settings') {
         showSettings();
       }
@@ -571,6 +603,15 @@ function startRinkOS() {
     rinkosScreen.appendChild(logoImg);
     drawSetupScreen();
   } else {
+    // Calculate initial time offset
+    const savedTime = getDeviceTime();
+    const [hours, minutes] = savedTime.split(':').map(Number);
+    const now = new Date();
+    const deviceTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+    timeOffset = deviceTime.getTime() - now.getTime();
+    
+    // Start clock updates
+    setInterval(updateClock, 1000);
     showStartupAnimation();
   }
 }
@@ -927,6 +968,141 @@ function startKeepalive() {
 window.addEventListener('DOMContentLoaded', () => {
   showPowerOffOverlay();
   startKeepalive();
+  initLuaEnv();
 });
+
+function initLuaEnv() {
+    if (!luaEnv) {
+        luaEnv = new RinkLuaEnv();
+    }
+}
+
+function showRinkoScript() {
+    state = 'rinkscript';
+    rinkosScreen.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:0.5em;width:100%;height:100%;padding:0.5em;box-sizing:border-box;">
+            <div style="font-size:1.1em;text-align:center;margin-bottom:0.25em;">RinkoScript Editor</div>
+            <textarea id="script-editor" style="width:100%;height:300px;font-family:monospace;font-size:1em;resize:none;padding:0.5em;box-sizing:border-box;border:1px solid #ccc;margin-bottom:0.25em;" placeholder="Enter your Lua script here..."></textarea>
+            <div style="display:flex;gap:0.5em;justify-content:center;margin:0.25em 0;">
+                <button id="run-script" style="font-size:1em;padding:0.25em 0.75em;height:2em;">Run</button>
+                <button id="save-script" style="font-size:1em;padding:0.25em 0.75em;height:2em;">Save</button>
+                <button id="load-script" style="font-size:1em;padding:0.25em 0.75em;height:2em;">Load</button>
+                <button id="script-back" style="font-size:1em;padding:0.25em 0.75em;height:2em;">Back</button>
+            </div>
+            <div style="font-size:0.9em;color:#666;margin-top:0.25em;">Output:</div>
+            <div id="script-output" style="font-family:monospace;white-space:pre-wrap;height:100px;border:1px solid #ccc;padding:0.5em;overflow-y:auto;background:#fff;margin-top:0.25em;"></div>
+        </div>
+    `;
+
+    document.getElementById('run-script').onclick = () => {
+        const code = document.getElementById('script-editor').value;
+        const output = document.getElementById('script-output');
+        if (luaEnv && code) {
+            try {
+                // Clear previous output
+                output.textContent = '';
+                
+                // Run the script
+                const success = luaEnv.runScript('temp', code);
+                
+                // Display result
+                output.textContent = success ? 'Script executed successfully' : 'Error executing script';
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+            }
+        }
+    };
+
+    document.getElementById('save-script').onclick = () => {
+        const code = document.getElementById('script-editor').value;
+        const output = document.getElementById('script-output');
+        if (code) {
+            localStorage.setItem('rinkscript_saved', code);
+            output.textContent = 'Script saved successfully';
+        }
+    };
+
+    document.getElementById('load-script').onclick = () => {
+        const savedScript = localStorage.getItem('rinkscript_saved');
+        const output = document.getElementById('script-output');
+        if (savedScript) {
+            document.getElementById('script-editor').value = savedScript;
+            output.textContent = 'Script loaded successfully';
+        } else {
+            output.textContent = 'No saved script found';
+        }
+    };
+
+    document.getElementById('script-back').onclick = showMenu;
+
+    // Load saved script if exists
+    const savedScript = localStorage.getItem('rinkscript_saved');
+    if (savedScript) {
+        document.getElementById('script-editor').value = savedScript;
+    }
+}
+
+// Add RinkOS API functions for Lua
+window.rinkosAddScript = function(name) {
+    installedScripts.add(name);
+    // Refresh menu to show new script
+    if (state === 'menu') {
+        drawMenu();
+    }
+};
+
+window.rinkosDrawText = function(x, y, text) {
+    const element = document.createElement('div');
+    element.style.position = 'absolute';
+    element.style.left = `${x}px`;
+    element.style.top = `${y}px`;
+    element.textContent = text;
+    rinkosScreen.appendChild(element);
+};
+
+window.rinkosDrawBox = function(x, y, width, height) {
+    const element = document.createElement('div');
+    element.style.position = 'absolute';
+    element.style.left = `${x}px`;
+    element.style.top = `${y}px`;
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
+    element.style.border = '1px solid black';
+    rinkosScreen.appendChild(element);
+};
+
+window.rinkosClearScreen = function() {
+    rinkosScreen.innerHTML = '';
+};
+
+window.rinkosGetInput = function() {
+    // Implement input handling
+    return '';
+};
+
+window.rinkosSendMessage = function(username, message) {
+    const user = getUserInfo();
+    const now = new Date();
+    fetch('http://localhost:3001/api/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            sender: user.username,
+            recipient: username,
+            time: now.toISOString(),
+            text: message
+        })
+    });
+};
+
+window.rinkosGetMessages = function() {
+    // Implement message retrieval
+    return [];
+};
+
+window.rinkosGetPeers = function() {
+    // Implement peer list retrieval
+    return [];
+};
 
 window.addEventListener('keydown', handleKey); 
